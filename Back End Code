@@ -1,0 +1,74 @@
+from flask import Flask, request, jsonify
+from textblob import TextBlob
+import requests
+from bs4 import BeautifulSoup
+from flask_mail import Mail, Message
+
+app = Flask(__name__)
+
+# Flask-Mail configuration
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'your_email@gmail.com'  # Update with your email
+app.config['MAIL_PASSWORD'] = 'your_password'  # Update with your password or app-specific password
+mail = Mail(app)
+
+# Scrape website text
+def scrape_text(url):
+    try:
+        response = requests.get(url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        return soup.get_text(separator=" ")
+    except Exception as e:
+        return ""
+
+# Analyze sentiment
+def analyze_sentiment(text):
+    blob = TextBlob(text)
+    return blob.sentiment.polarity
+
+# Assessment function
+@app.route('/run_assessment', methods=['POST'])
+def run_assessment():
+    data = request.get_json()
+    email = data.get('email')
+    website_url = data.get('websiteUrl')
+    social_media_url = data.get('socialMediaUrl')
+
+    website_text = scrape_text(website_url)
+    website_sentiment = analyze_sentiment(website_text)
+
+    # Simplified scores
+    sentiment_score = max(0, min(website_sentiment, 1))
+    color_consistency_score = 0.8  # Placeholder
+    demographic_match_score = 0.7  # Placeholder
+
+    # Calculate final score
+    total_score = (sentiment_score * 0.4 + color_consistency_score * 0.3 + demographic_match_score * 0.3) * 100
+    rounded_score = round(total_score, 2)
+
+    # Email content
+    message_body = f"""
+    Thank you for completing The Savvy Brand Test!
+
+    Your Results:
+    - Sentiment Score: {sentiment_score * 100}%
+    - Visual Consistency Score: {color_consistency_score * 100}%
+    - Demographic Match Score: {demographic_match_score * 100}%
+    
+    Overall Score: {rounded_score}%
+
+    Thank you for using The Savvy Brand Test!
+    """
+
+    # Send email with results
+    msg = Message("Your Savvy Brand Test Results", sender="your_email@gmail.com", recipients=[email])
+    msg.body = message_body
+    mail.send(msg)
+
+    message = f"Results have been sent to {email}. Overall Score: {rounded_score}%"
+    return jsonify({"message": message})
+
+if __name__ == '__main__':
+    app.run(debug=True)
